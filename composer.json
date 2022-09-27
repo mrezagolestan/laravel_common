@@ -1,0 +1,29 @@
+{
+    "name": "backend/laravel_common",
+    "description": "Piod Laravel Common Package",
+    "type": "project",
+    "keywords": [
+        "piod",
+        "laravel",
+        "common"
+    ],
+    "require": {
+        "php-amqplib/php-amqplib": "^3.2"
+    },
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Mohammad Reza Golestan",
+            "email": "it@pio.ir"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "Piod\\LaravelCommon\\": "src/"
+        },
+        "files": [
+            "app/helpers.php"
+        ]
+    },
+    "minimum-stability": "stable"
+}
