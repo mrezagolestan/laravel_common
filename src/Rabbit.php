@@ -11,83 +11,105 @@ use PhpAmqpLib\Wire;
 class Rabbit
 {
     private static $waitSecond = 5;
-    private static $rabbitConnection;
+    private static $rabbitPublishConnection;
+    private static $rabbitConsumeConnection;
+    private static $rabbitPublishChannel;
+    private static $rabbitConsumeChannel;
 
 
-    public static function publish($body, $exchange, $queue_name, $headers = [])
+    /**
+     *
+     * Convert an object to an array
+     *
+     * @param object $object The object to convert
+     * @return      array
+     *
+     */
+    public static function publish($persistent, $body, $exchange, $queue_name, $headers = [])
     {
-        $try = true;
-        while ($try) {
+        $tryCount = 0;
+        while (true) {
             try {
                 //Connect to RabbitMQ
-                self::connect();
-
-                //Publish
+                self::connect('publish');
+                $tryCount = 0;
                 $body = json_encode($body);
                 //Make Channel
-                $channel = self::$rabbitConnection->channel();
+                if (!self::$rabbitPublishChannel) {
+                    self::$rabbitPublishChannel = self::$rabbitPublishConnection->channel();
+                }
                 //Make & Send Message
                 $msg = new AMQPMessage($body, [
-                    'delivery_mode' => AMQPMessage::DELIVERY_MODE_PERSISTENT
+                    'delivery_mode' => ($persistent ? AMQPMessage::DELIVERY_MODE_PERSISTENT : AMQPMessage::DELIVERY_MODE_NON_PERSISTENT)
                 ]);
                 if ($headers != []) {
                     $headers = new Wire\AMQPTable($headers);
                     $msg->set('application_headers', $headers);
                 }
-                return $channel->basic_publish($body, $exchange, $queue_name, $headers);
+                return self::$rabbitPublishChannel->basic_publish($msg, $exchange, $queue_name);
             } catch (\Exception $e) {
-                if (is_local()) {
-                    dd($e);
-                } else {
-                    Log::critical($e, [
-                        'message' => 'RabbitListener:RabbitMQ connection disconnected, try to reconnect ...'
-                    ]);
-                    $try = true;
-                    self::cleanup_connection();
-                    usleep((self::$waitSecond * 1000000));
-                }
+                $tryCount++;
+                self::disconnectLog($e, 'publish', $tryCount);
+                self::cleanup_connection('publish');
+                usleep((self::$waitSecond * 1000000));
             }
         }
-        self::$rabbitConnection->close();
+        self::$rabbitPublishConnection->close();
     }
 
-    public static function consume($queueName, $callbackFunction)
+    public static function consume($callbackFunction,$queueName,$autoAck = false,$prefetchSize = 1)
     {
-        $try = true;
-        while ($try) {
+        $tryCount = 0;
+        while (true) {
             try {
                 //Connect to RabbitMQ
-                self::connect();
-
+                self::connect('consume');
+                $tryCount = 0;
                 //Consume
-                $channel = self::$rabbitConnection->channel();
-                $channel->basic_qos(null, 1, null);
-                $channel->basic_consume($queueName, '', false, false, false, false, function ($msg) use ($callbackFunction) {
-                    $callbackFunction($msg);
+                if (!self::$rabbitConsumeChannel) {
+                    self::$rabbitConsumeChannel = self::$rabbitConsumeConnection->channel();
+                }
+                self::$rabbitConsumeChannel->basic_qos(null, $prefetchSize, null);
+                self::$rabbitConsumeChannel->basic_consume($queueName, '', false, $autoAck, false, false, function ($msg) use ($callbackFunction, $autoAck) {
+
+                    $body = json_decode($msg->body);
+                    $headers = $msg->get_properties()['application_headers'] ?? [];
+                    $callbackResponse = $callbackFunction($body, $headers);
+                    //if need to be acked
+                    if (!$autoAck && $callbackResponse) {
+                        $msg->ack();
+                    } else if (!$autoAck && !$callbackResponse) {
+                        $msg->nack();
+                    }
                 });
-                while ($channel->is_open()) {
-                    $channel->wait();
+                while (self::$rabbitConsumeChannel->is_open()) {
+                    self::$rabbitConsumeChannel->wait();
                 }
             } catch (\Exception $e) {
-                if (is_local()) {
-                    dd($e);
-                } else {
-                    Log::critical($e, [
-                        'message' => 'RabbitListener:RabbitMQ connection disconnected, try to reconnect ...'
-                    ]);
-                    $try = true;
-                    self::cleanup_connection();
-                    usleep((self::$waitSecond * 1000000));
-                }
+                dd($e);
+                $tryCount++;
+                self::disconnectLog($e, 'consume', $tryCount);
+                self::cleanup_connection('consume');
+                usleep((self::$waitSecond * 1000000));
             }
         }
-        self::$rabbitConnection->close();
+        self::$rabbitConsumeConnection->close();
     }
 
     //------------------------ Basic Methods
-    private static function connect()
+    public function __destruct()
     {
-        if (!self::$rabbitConnection) {
+        self::shutdown();
+    }
+
+    private static function connect($type)
+    {
+        if ($type == 'publish') {
+            $typeConnection = 'rabbitPublishConnection';
+        } else {
+            $typeConnection = 'rabbitConsumeConnection';
+        }
+        if (!self::$$typeConnection) {
             $host = config('piod.rabbitmq.host');
             $port = config('piod.rabbitmq.port');
             $user = config('piod.rabbitmq.user');
@@ -95,7 +117,7 @@ class Rabbit
             $provider = config('piod.rabbitmq.vhost');
 
             // If you want a better load-balancing, you cann reshuffle the list.
-            self::$rabbitConnection = AMQPStreamConnection::create_connection([
+            self::$$typeConnection = AMQPStreamConnection::create_connection([
                     ['host' => $host, 'port' => $port, 'user' => $user, 'password' => $password, 'vhost' => $provider],
                 ]
                 , [
@@ -111,21 +133,56 @@ class Rabbit
                 ]
             );
         }
-        return self::$rabbitConnection;
     }
 
-    private static function cleanup_connection()
+    private static function cleanup_connection($type)
     {
+        if ($type == 'publish') {
+            $typeConnection = 'rabbitPublishConnection';
+            $typeChannel = 'rabbitPublishChannel';
+        } else {
+            $typeConnection = 'rabbitConsumeConnection';
+            $typeChannel = 'rabbitConsumeChannel';
+        }
         // Connection might already be closed.
         // Ignoring exceptions.
         try {
-            if (self::$rabbitConnection !== null) {
-                self::$rabbitConnection->close();
+            if (self::$$typeConnection !== null) {
+                self::$$typeConnection->close();
+                self::$$typeConnection = null;
+                self::$$typeChannel = null;
             }
         } catch (\ErrorException $e) {
             Log::warning($e);
         }
     }
 
+    private static function shutdown()
+    {
+        echo 'RabbitMQ:connection shutdown
+';
+        if (self::$rabbitPublishConnection) {
+            self::$rabbitPublishConnection->close();
+        }
+
+        if (self::$rabbitConsumeConnection) {
+            self::$rabbitConsumeConnection->close();
+        }
+    }
+
+    private static function disconnectLog($error, $type, $tryTime)
+    {
+        $message = 'RabbitMQ:' . $type . 'connection: disconnected';
+
+        echo $message . ':reconnect try ' . $tryTime . '
+';
+
+        if (!is_local()) {
+            Log::critical($error, [
+                'message' => $message,
+                'tryTime' => $tryTime,
+            ]);
+        }
+    }
 
 }
