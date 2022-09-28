@@ -25,5 +25,12 @@
             "src/helpers.php"
         ]
     },
-    "minimum-stability": "stable"
+    "minimum-stability": "stable",
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Piod\\LaravelCommon\\LaravelCommonServiceProvider"
+            ]
+        }
+    }
 }
