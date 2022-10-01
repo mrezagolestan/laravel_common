@@ -110,11 +110,11 @@ class Rabbit
             $typeConnection = 'rabbitConsumeConnection';
         }
         if (!self::$$typeConnection) {
-            $host = config('piod.rabbitmq.host');
-            $port = config('piod.rabbitmq.port');
-            $user = config('piod.rabbitmq.user');
-            $password = config('piod.rabbitmq.password');
-            $provider = config('piod.rabbitmq.vhost');
+            $host = config('piod_common.rabbitmq.host');
+            $port = config('piod_common.rabbitmq.port');
+            $user = config('piod_common.rabbitmq.user');
+            $password = config('piod_common.rabbitmq.password');
+            $provider = config('piod_common.rabbitmq.vhost');
 
             // If you want a better load-balancing, you cann reshuffle the list.
             self::$$typeConnection = AMQPStreamConnection::create_connection([

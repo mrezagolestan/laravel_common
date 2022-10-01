@@ -8,7 +8,10 @@
         "common"
     ],
     "require": {
-        "php-amqplib/php-amqplib": "^3.2"
+        "php-amqplib/php-amqplib": "^3.2",
+        "sentry/sentry-laravel": "^2.9",
+        "predis/predis": "^2.0",
+        "fruitcake/laravel-cors": "^2.0"
     },
     "license": "MIT",
     "authors": [
@@ -25,6 +28,15 @@
             "src/helpers.php"
         ]
     },
+    "autoload-dev": {
+        "psr-4": {
+            "Piod\\LaravelCommon\\": "src/"
+        },
+        "files": [
+            "src/helpers.php"
+        ]
+    },
+
     "minimum-stability": "stable",
     "extra": {
         "laravel": {
