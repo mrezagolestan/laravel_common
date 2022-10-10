@@ -49,13 +49,14 @@ class LaravelCommonServiceProvider extends ServiceProvider
 
     protected function registerPublishing()
     {
-        $this->publishes([
-            __DIR__.'/app' => app_path('/'),
-        ], 'piod:app');
+
+
 
         $this->publishes([
+            __DIR__.'/app' => app_path('/'),
             __DIR__.'/config/piod_common.php' => config_path('piod_common.php'),
-        ], 'piod:config:common');
+        ], 'laravel-assets');
+
 
         $this->publishes([
             __DIR__.'/config/logging.php' => config_path('logging.php'),
