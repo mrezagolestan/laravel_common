@@ -21,6 +21,12 @@
             "email": "it@pio.ir"
         }
     ],
+    "scripts": {
+        "post-package-install": [
+            "php artisan vendor:publish --tag=piod:app --force",
+            "php artisan vendor:publish --tag=piod:config:common --force"
+        ]
+    },
     "autoload": {
         "psr-4": {
             "Piod\\LaravelCommon\\": "src/"
