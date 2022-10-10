@@ -71,14 +71,13 @@ class Rabbit
                 }
                 self::$rabbitConsumeChannel->basic_qos(null, $prefetchSize, null);
                 self::$rabbitConsumeChannel->basic_consume($queueName, '', false, $autoAck, false, false, function ($msg) use ($callbackFunction, $autoAck) {
+                    $headers = $msg->get_properties()['application_headers'] ? $msg->get('application_headers')->getNativeData() : [];
+                    $callbackResponse = $callbackFunction($msg->body, $headers);
 
-                    $body = json_decode($msg->body);
-                    $headers = $msg->get_properties()['application_headers'] ?? [];
-                    $callbackResponse = $callbackFunction($body, $headers);
                     //if need to be acked
-                    if (!$autoAck && $callbackResponse) {
+                    if (!$autoAck && $callbackResponse === true) {
                         $msg->ack();
-                    } else if (!$autoAck && !$callbackResponse) {
+                    } else if (!$autoAck && $callbackResponse != true) {
                         $msg->nack();
                     }
                 });
@@ -86,7 +85,6 @@ class Rabbit
                     self::$rabbitConsumeChannel->wait();
                 }
             } catch (\Exception $e) {
-                dd($e);
                 $tryCount++;
                 self::disconnectLog($e, 'consume', $tryCount);
                 self::cleanup_connection('consume');

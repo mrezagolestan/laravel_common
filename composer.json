@@ -8,6 +8,7 @@
         "common"
     ],
     "require": {
+        "php": "^8.0",
         "php-amqplib/php-amqplib": "^3.2",
         "sentry/sentry-laravel": "^2.9",
         "predis/predis": "^2.0",
